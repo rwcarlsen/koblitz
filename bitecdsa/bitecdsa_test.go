@@ -260,3 +260,32 @@ func TestVectors(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkVerify(b *testing.B) {
+	b.StopTimer()
+	data := testVectors[0]
+	pub := &PublicKey{
+		BitCurve: bitelliptic.S256(),
+		X:        fromHex(data.Qx),
+		Y:        fromHex(data.Qy),
+	}
+	hashed, _ := base64.StdEncoding.DecodeString(data.hash)
+	r := fromHex(data.r)
+	s := fromHex(data.s)
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		Verify(pub, hashed, r, s)
+	}
+}
+
+func BenchmarkSign(b *testing.B) {
+	b.StopTimer()
+	priv, _ := GenerateKey(bitelliptic.S256(), rand.Reader)
+	hashed := []byte("testing")
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		Sign(rand.Reader, priv, hashed)
+	}
+}

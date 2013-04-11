@@ -5,7 +5,7 @@
 
 // Package ecdsa implements the Elliptic Curve Digital Signature Algorithm, as
 // defined in FIPS 186-3.
-package bitecdsa
+package kecdsa
 
 // References:
 //   [NSA]: Suite B implementor's guide to FIPS 186-3,
@@ -14,15 +14,15 @@ package bitecdsa
 //     http://www.secg.org/download/aid-780/sec1-v2.pdf
 
 import (
-	"big"
-	"bitelliptic"
 	"io"
-	"os"
+	"math/big"
+
+	"github.com/rwcarlsen/koblitz/kelliptic"
 )
 
 // PublicKey represents an ECDSA public key.
 type PublicKey struct {
-	*bitelliptic.BitCurve
+	*kelliptic.BitCurve
 	X, Y *big.Int
 }
 
@@ -36,7 +36,7 @@ var one = new(big.Int).SetInt64(1)
 
 // randFieldElement returns a random element of the field underlying the given
 // curve using the procedure given in [NSA] A.2.1.
-func randFieldElement(c *bitelliptic.BitCurve, rand io.Reader) (k *big.Int, err os.Error) {
+func randFieldElement(c *kelliptic.BitCurve, rand io.Reader) (k *big.Int, err error) {
 	b := make([]byte, c.BitSize/8+8)
 	_, err = io.ReadFull(rand, b)
 	if err != nil {
@@ -51,7 +51,7 @@ func randFieldElement(c *bitelliptic.BitCurve, rand io.Reader) (k *big.Int, err 
 }
 
 // GenerateKey generates a public&private key pair.
-func GenerateKey(c *bitelliptic.BitCurve, rand io.Reader) (priv *PrivateKey, err os.Error) {
+func GenerateKey(c *kelliptic.BitCurve, rand io.Reader) (priv *PrivateKey, err error) {
 	k, err := randFieldElement(c, rand)
 	if err != nil {
 		return
@@ -68,7 +68,7 @@ func GenerateKey(c *bitelliptic.BitCurve, rand io.Reader) (priv *PrivateKey, err
 // about how this is done. [NSA] suggests that this is done in the obvious
 // manner, but [SECG] truncates the hash to the bit-length of the curve order
 // first. We follow [SECG] because that's what OpenSSL does.
-func hashToInt(hash []byte, c *bitelliptic.BitCurve) *big.Int {
+func hashToInt(hash []byte, c *kelliptic.BitCurve) *big.Int {
 	orderBits := c.N.BitLen()
 	orderBytes := (orderBits + 7) / 8
 	if len(hash) > orderBytes {
@@ -87,7 +87,7 @@ func hashToInt(hash []byte, c *bitelliptic.BitCurve) *big.Int {
 // larger message) using the private key, priv. It returns the signature as a
 // pair of integers. The security of the private key depends on the entropy of
 // rand.
-func Sign(rand io.Reader, priv *PrivateKey, hash []byte) (r, s *big.Int, err os.Error) {
+func Sign(rand io.Reader, priv *PrivateKey, hash []byte) (r, s *big.Int, err error) {
 	// See [NSA] 3.4.1
 	c := priv.PublicKey.BitCurve
 

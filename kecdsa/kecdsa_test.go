@@ -3,18 +3,18 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package bitecdsa
+package kecdsa
 
 import (
-	"big"
-	"bitelliptic"
+	"math/big"
+	"github.com/rwcarlsen/koblitz/kelliptic"
 	"crypto/sha1"
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
 )
 
-func testKeyGeneration(t *testing.T, c *bitelliptic.BitCurve, tag string) {
+func testKeyGeneration(t *testing.T, c *kelliptic.BitCurve, tag string) {
 	priv, err := GenerateKey(c, rand.Reader)
 	if err != nil {
 		t.Errorf("%s: error: %s", tag, err)
@@ -26,16 +26,16 @@ func testKeyGeneration(t *testing.T, c *bitelliptic.BitCurve, tag string) {
 }
 
 func TestKeyGeneration(t *testing.T) {
-	testKeyGeneration(t, bitelliptic.S256(), "S256")
+	testKeyGeneration(t, kelliptic.S256(), "S256")
 	if testing.Short() {
 		return
 	}
-	testKeyGeneration(t, bitelliptic.S160(), "S160")
-	testKeyGeneration(t, bitelliptic.S192(), "S192")
-	testKeyGeneration(t, bitelliptic.S224(), "S224")
+	testKeyGeneration(t, kelliptic.S160(), "S160")
+	testKeyGeneration(t, kelliptic.S192(), "S192")
+	testKeyGeneration(t, kelliptic.S224(), "S224")
 }
 
-func testSignAndVerify(t *testing.T, c *bitelliptic.BitCurve, tag string) {
+func testSignAndVerify(t *testing.T, c *kelliptic.BitCurve, tag string) {
 	priv, _ := GenerateKey(c, rand.Reader)
 
 	hashed := []byte("testing")
@@ -56,13 +56,13 @@ func testSignAndVerify(t *testing.T, c *bitelliptic.BitCurve, tag string) {
 }
 
 func TestSignAndVerify(t *testing.T) {
-	testSignAndVerify(t, bitelliptic.S256(), "S256")
+	testSignAndVerify(t, kelliptic.S256(), "S256")
 	if testing.Short() {
 		return
 	}
-	testSignAndVerify(t, bitelliptic.S160(), "S160")
-	testSignAndVerify(t, bitelliptic.S192(), "S192")
-	testSignAndVerify(t, bitelliptic.S224(), "S224")
+	testSignAndVerify(t, kelliptic.S160(), "S160")
+	testSignAndVerify(t, kelliptic.S192(), "S192")
+	testSignAndVerify(t, kelliptic.S224(), "S224")
 }
 
 func fromHex(s string) *big.Int {
@@ -208,7 +208,7 @@ func TestVectors(t *testing.T) {
 
 	for i, test := range testVectors {
 		pub := PublicKey{
-			BitCurve: bitelliptic.S256(),
+			BitCurve: kelliptic.S256(),
 			X:     fromHex(test.Qx),
 			Y:     fromHex(test.Qy),
 		}

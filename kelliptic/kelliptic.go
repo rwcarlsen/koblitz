@@ -1,4 +1,4 @@
-package bitelliptic
+package kelliptic
 
 // Copyright 2010 The Go Authors. All rights reserved.
 // Copyright 2011 ThePiachu. All rights reserved.
@@ -16,9 +16,8 @@ package bitelliptic
 // reverse the transform than to operate in affine coordinates.
 
 import (
-	"big"
+	"math/big"
 	"io"
-	"os"
 	"sync"
 )
 
@@ -224,7 +223,7 @@ var mask = []byte{0xff, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f}
 //TODO: double check if it is okay
 // GenerateKey returns a public/private key pair. The private key is generated
 // using the given reader, which must return random data.
-func (BitCurve *BitCurve) GenerateKey(rand io.Reader) (priv []byte, x, y *big.Int, err os.Error) {
+func (BitCurve *BitCurve) GenerateKey(rand io.Reader) (priv []byte, x, y *big.Int, err error) {
 	byteLen := (BitCurve.BitSize + 7) >> 3
 	priv = make([]byte, byteLen)
 

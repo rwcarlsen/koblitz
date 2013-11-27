@@ -6,11 +6,11 @@
 package kelliptic
 
 import (
+	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
 	"math/big"
 	"testing"
-  "crypto/elliptic"
 )
 
 func TestOnCurve(t *testing.T) {

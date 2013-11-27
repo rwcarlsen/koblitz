@@ -16,10 +16,9 @@ package kelliptic
 // reverse the transform than to operate in affine coordinates.
 
 import (
+	"crypto/elliptic"
 	"math/big"
 	"sync"
-
-	"crypto/elliptic"
 )
 
 // A Curve represents a Koblitz Curve with a=0.

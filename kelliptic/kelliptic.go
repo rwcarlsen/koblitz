@@ -17,6 +17,7 @@ package kelliptic
 
 import (
 	"crypto/elliptic"
+	"errors"
 	"math/big"
 	"sync"
 )
@@ -311,4 +312,193 @@ func S224() *Curve {
 func S256() *Curve {
 	initonce.Do(initAll)
 	return secp256k1
+}
+
+// Point Compression Routines. These could use a lot of testing.
+func (curve *Curve) CompressPoint(X, Y *big.Int) (cp []byte) {
+
+	by := new(big.Int).And(Y, big.NewInt(1)).Int64()
+	bx := X.Bytes()
+	cp = make([]byte, len(bx)+1)
+	if by == 1 {
+		cp[0] = byte(3)
+	} else {
+		cp[0] = byte(2)
+	}
+	copy(cp[1:], bx)
+
+	return
+}
+
+func (curve *Curve) DecompressPoint(cp []byte) (X, Y *big.Int, err error) {
+
+	var c int64
+
+	if len(cp) != 33 {
+		return nil, nil, errors.New("Not a compressed point. (Require 33 bytes)")
+	}
+
+	if cp[0] == byte(0x03) { // c = 2 most signiﬁcant bits of S
+		c = 1
+	} else if cp[0] == byte(0x02) {
+		c = 0
+	} else {
+		return nil, nil, errors.New("Not a compressed point. (Invalid Header)")
+	}
+
+	X = new(big.Int).SetBytes(cp[1:])
+	Y = new(big.Int).SetBytes(cp[1:])
+
+	Y.Mod(Y.Mul(Y, X), curve.P) // solve for y in y**2 = x**3 + x*a + b assume a = 0
+	Y.Mod(Y.Mul(Y, X), curve.P)
+	Y.Mod(Y.Add(Y, curve.B), curve.P)
+
+	Y = curve.Sqrt(Y)
+
+	if Y.Cmp(big.NewInt(0)) == 0 {
+		return nil, nil, errors.New("Not a compressed point. (Not on curve)")
+	}
+
+	if c != new(big.Int).And(Y, big.NewInt(1)).Int64() {
+		Y.Sub(curve.P, Y)
+	}
+
+	return
+}
+
+// Modulo Square root involves deep magic. Tread lightly.
+func (curve *Curve) Sqrt(a *big.Int) *big.Int {
+	ZERO := big.NewInt(0)
+	ONE := big.NewInt(1)
+	TWO := big.NewInt(2)
+	THREE := big.NewInt(3)
+	FOUR := big.NewInt(4)
+
+	p := curve.P
+
+	t0 := new(big.Int)
+
+	// Simple Cases
+	//
+
+	if legendre_symbol(a, p) != 1 {
+		return ZERO
+	} else if a.Cmp(ZERO) == 0 {
+		return ZERO
+	} else if p.Cmp(TWO) == 0 {
+		return p
+	} else if t0.Mod(p, FOUR).Cmp(THREE) == 0 {
+		t0.Add(p, ONE)
+		t0.Div(t0, FOUR)
+		t0.Exp(a, t0, p)
+		return t0
+	}
+
+	// Partition p-1 to s * 2^e for an odd s (i.e.
+	// reduce all the powers of 2 from p-1)
+	//
+	s := new(big.Int)
+	s.Sub(p, ONE)
+
+	e := new(big.Int)
+	e.Set(ZERO)
+	for t0.Mod(s, TWO).Cmp(ZERO) == 0 {
+		s.Div(s, TWO)
+		e.Add(e, ONE)
+	}
+
+	// Find some 'n' with a legendre symbol n|p = -1.
+	// Shouldn't take long.
+	//
+	n := new(big.Int)
+	n.Set(TWO)
+	for legendre_symbol(n, p) != -1 {
+		n.Add(n, ONE)
+	}
+
+	/*
+	   Here be dragons!
+
+	   Read the paper "Square roots from 1; 24, 51,
+	   10 to Dan Shanks" by Ezra Brown for more
+	   information
+
+	   x is a guess of the square root that gets better
+	   with each iteration.
+	   b is the "fudge factor" - by how much we're off
+	   with the guess. The invariant x^2 = ab (mod p)
+	   is maintained throughout the loop.
+	   g is used for successive powers of n to update
+	   both a and b
+	   r is the exponent - decreases with each update
+	*/
+
+	x := new(big.Int)
+	x.Add(s, ONE)
+	x.Div(x, TWO)
+	x.Exp(a, x, p)
+
+	b := new(big.Int)
+	b.Exp(a, s, p)
+
+	g := new(big.Int)
+	g.Exp(n, s, p)
+
+	r := new(big.Int)
+	r.Set(e)
+
+	t := new(big.Int)
+	m := new(big.Int)
+	gs := new(big.Int)
+
+	for {
+		t.Set(b)
+		m.Set(ZERO)
+
+		for ; m.Cmp(r) < 0; m.Add(m, ONE) {
+			if t.Cmp(ONE) == 0 {
+				break
+			}
+			t.Exp(t, TWO, p)
+		}
+
+		if m.Cmp(ZERO) == 0 {
+			return x
+		}
+
+		gs.Sub(r, m)
+		gs.Sub(gs, ONE)
+		gs.Exp(TWO, gs, nil)
+		gs.Exp(g, gs, p)
+
+		g.Mod(g.Mul(gs, gs), p)
+		x.Mod(x.Mul(x, gs), p)
+		b.Mod(b.Mul(b, g), p)
+		r.Set(m)
+	}
+
+	return x // This will probably never get reached.
+}
+
+func legendre_symbol(a, p *big.Int) int {
+	ZERO := big.NewInt(0)
+	ONE := big.NewInt(1)
+	TWO := big.NewInt(2)
+
+	ls := new(big.Int).Mod(a, p)
+
+	if ls.Cmp(ZERO) == 0 {
+		return 0 // 0 if a ≡ 0 (mod p)
+	}
+
+	ps := new(big.Int).Sub(p, ONE)
+
+	ls.Div(ps, TWO)
+	ls.Exp(a, ls, p)
+
+	if c := ls.Cmp(ps); c == 0 {
+		return -1 // -1 if a is a quadratic non-residue modulo p
+	}
+
+	return 1 // 1 if a is a quadratic residue modulo p and a ≢ 0 (mod p)
 }

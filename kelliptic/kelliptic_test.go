@@ -6,6 +6,7 @@
 package kelliptic
 
 import (
+	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -98,13 +99,13 @@ func BenchmarkBaseMult(b *testing.B) {
 //TODO: test more curves?
 func TestMarshal(t *testing.T) {
 	s256 := S256()
-	_, x, y, err := s256.GenerateKey(rand.Reader)
+	_, x, y, err := elliptic.GenerateKey(s256, rand.Reader)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	serialised := s256.Marshal(x, y)
-	xx, yy := s256.Unmarshal(serialised)
+	serialised := elliptic.Marshal(s256, x, y)
+	xx, yy := elliptic.Unmarshal(s256, serialised)
 	if xx == nil {
 		t.Error("failed to unmarshal")
 		return

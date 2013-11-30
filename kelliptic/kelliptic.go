@@ -334,23 +334,30 @@ func (curve *Curve) DecompressPoint(cp []byte) (X, Y *big.Int, err error) {
 
 	var c int64
 
-	if len(cp) != 33 {
-		return nil, nil, errors.New("Not a compressed point. (Require 33 bytes)")
-	}
-
-	if cp[0] == byte(0x03) { // c = 2 most signiﬁcant bits of S
+	switch cp[0] { // c = 2 most signiﬁcant bits of S
+	case byte(0x03):
 		c = 1
-	} else if cp[0] == byte(0x02) {
+		break
+	case byte(0x02):
 		c = 0
-	} else {
+		break
+	case byte(0x04): // This is an uncompressed point. Use base Unmarshal.
+		X, Y = elliptic.Unmarshal(curve, cp)
+		return
+	default:
 		return nil, nil, errors.New("Not a compressed point. (Invalid Header)")
 	}
 
-	X = new(big.Int).SetBytes(cp[1:])
-	Y = new(big.Int).SetBytes(cp[1:])
+	byteLen := (curve.Params().BitSize + 7) >> 3
+	if len(cp) != 1+byteLen {
+		return nil, nil, errors.New("Not a compressed point. (Require 1 + key size)")
+	}
 
-	Y.Mod(Y.Mul(Y, X), curve.P) // solve for y in y**2 = x**3 + x*a + b assume a = 0
-	Y.Mod(Y.Mul(Y, X), curve.P)
+	X = new(big.Int).SetBytes(cp[1:])
+	Y = new(big.Int)
+
+	Y.Mod(Y.Mul(X, X), curve.P) // solve for y in y**2 = x**3 + x*a + b (mod p)
+	Y.Mod(Y.Mul(Y, X), curve.P) // assume a = 0
 	Y.Mod(Y.Add(Y, curve.B), curve.P)
 
 	Y = curve.Sqrt(Y)
@@ -366,7 +373,11 @@ func (curve *Curve) DecompressPoint(cp []byte) (X, Y *big.Int, err error) {
 	return
 }
 
-// Modulo Square root involves deep magic. Tread lightly.
+// Modulo Square root involves deep magic. Uses the Shanks-Tonelli algorithem:
+//    http://en.wikipedia.org/wiki/Shanks-Tonelli_algorithm
+// Translated from a python implementation found here:
+//    http://eli.thegreenplace.net/2009/03/07/computing-modular-square-roots-in-python/
+//
 func (curve *Curve) Sqrt(a *big.Int) *big.Int {
 	ZERO := big.NewInt(0)
 	ONE := big.NewInt(1)
@@ -375,8 +386,7 @@ func (curve *Curve) Sqrt(a *big.Int) *big.Int {
 	FOUR := big.NewInt(4)
 
 	p := curve.P
-
-	t0 := new(big.Int)
+	c := new(big.Int)
 
 	// Simple Cases
 	//
@@ -387,11 +397,11 @@ func (curve *Curve) Sqrt(a *big.Int) *big.Int {
 		return ZERO
 	} else if p.Cmp(TWO) == 0 {
 		return p
-	} else if t0.Mod(p, FOUR).Cmp(THREE) == 0 {
-		t0.Add(p, ONE)
-		t0.Div(t0, FOUR)
-		t0.Exp(a, t0, p)
-		return t0
+	} else if c.Mod(p, FOUR).Cmp(THREE) == 0 {
+		c.Add(p, ONE)
+		c.Div(c, FOUR)
+		c.Exp(a, c, p)
+		return c
 	}
 
 	// Partition p-1 to s * 2^e for an odd s (i.e.
@@ -402,7 +412,7 @@ func (curve *Curve) Sqrt(a *big.Int) *big.Int {
 
 	e := new(big.Int)
 	e.Set(ZERO)
-	for t0.Mod(s, TWO).Cmp(ZERO) == 0 {
+	for c.Mod(s, TWO).Cmp(ZERO) == 0 {
 		s.Div(s, TWO)
 		e.Add(e, ONE)
 	}
@@ -422,28 +432,26 @@ func (curve *Curve) Sqrt(a *big.Int) *big.Int {
 	   Read the paper "Square roots from 1; 24, 51,
 	   10 to Dan Shanks" by Ezra Brown for more
 	   information
-
-	   x is a guess of the square root that gets better
-	   with each iteration.
-	   b is the "fudge factor" - by how much we're off
-	   with the guess. The invariant x^2 = ab (mod p)
-	   is maintained throughout the loop.
-	   g is used for successive powers of n to update
-	   both a and b
-	   r is the exponent - decreases with each update
 	*/
 
+	//  x is a guess of the square root that gets better
+	//  with each iteration.
 	x := new(big.Int)
 	x.Add(s, ONE)
 	x.Div(x, TWO)
 	x.Exp(a, x, p)
 
+	// b is the "fudge factor" - by how much we're off
+	// with the guess. The invariant x^2 = ab (mod p)
+	// is maintained throughout the loop.
 	b := new(big.Int)
 	b.Exp(a, s, p)
 
+	// g is used for successive powers of n to update both a and b
 	g := new(big.Int)
 	g.Exp(n, s, p)
 
+	// r is the exponent - decreases with each update
 	r := new(big.Int)
 	r.Set(e)
 
@@ -477,7 +485,7 @@ func (curve *Curve) Sqrt(a *big.Int) *big.Int {
 		r.Set(m)
 	}
 
-	return x // This will probably never get reached.
+	return ZERO // This will never get reached.
 }
 
 func legendre_symbol(a, p *big.Int) int {
